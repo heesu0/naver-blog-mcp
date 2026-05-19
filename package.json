@@ -1,0 +1,79 @@
+{
+  "name": "@oddeye/naver-blog-mcp",
+  "version": "0.1.1",
+  "description": "MCP server for Naver blog automation (publish, schedule, delete) via Playwright. Use with Claude Desktop, Claude Code, Cursor, etc.",
+  "type": "module",
+  "main": "dist/mcp/server.js",
+  "bin": {
+    "naver-blog-mcp": "dist/mcp/stdio.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "postinstall.mjs"
+  ],
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node --enable-source-maps dist/server.js",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/mcp/stdio.js', 0o755)\"",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "naver:login": "tsx src/scripts/login.ts",
+    "mcp:stdio": "tsx src/mcp/stdio.ts",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "node postinstall.mjs",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "naver",
+    "naver-blog",
+    "blog",
+    "automation",
+    "playwright",
+    "claude",
+    "anthropic"
+  ],
+  "author": "oddeye",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/konamgil/naver-blog-mcp.git"
+  },
+  "homepage": "https://github.com/konamgil/naver-blog-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/konamgil/naver-blog-mcp/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.7.0",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.38.3",
+    "hono": "^4.6.14",
+    "node-cron": "^3.0.3",
+    "playwright": "^1.49.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
+    "drizzle-kit": "^0.30.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
+}
