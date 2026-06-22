@@ -29,7 +29,7 @@ export async function convertMarkdownInput(
 
   return {
     title: input.title ?? fmTitle ?? result.title,
-    html: result.html,
+    html: stripGeneratedTagParagraph(result.html, tags),
     frontmatter: result.frontmatter,
     tags,
     errors: result.errors,
@@ -52,4 +52,24 @@ function normalizeTags(value: unknown): string[] | undefined {
     .map((tag) => String(tag).trim().replace(/^#/, ''))
     .filter(Boolean);
   return tags.length ? tags : undefined;
+}
+
+function stripGeneratedTagParagraph(html: string, tags?: string[]): string {
+  if (!tags?.length) return html;
+  const tagText = tags.map((tag) => `#${tag}`).join(' ');
+  const escaped = escapeRegExp(escapeHtml(tagText));
+  return html
+    .replace(new RegExp(`\\n?<p>${escaped}</p>\\s*$`), '')
+    .trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
