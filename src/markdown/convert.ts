@@ -25,13 +25,14 @@ export async function convertMarkdownInput(
   const fmTitle = typeof result.frontmatter.title === 'string'
     ? result.frontmatter.title
     : undefined;
-  const tags = normalizeTags(input.tags ?? result.frontmatter.tags);
+  const explicitTags = input.tags ? normalizeTags(input.tags) : undefined;
+  const frontmatterTags = normalizeTags(result.frontmatter.tags);
 
   return {
     title: input.title ?? fmTitle ?? result.title,
-    html: stripGeneratedTagParagraph(result.html, tags),
+    html: stripGeneratedTagParagraph(result.html, frontmatterTags),
     frontmatter: result.frontmatter,
-    tags,
+    tags: explicitTags,
     errors: result.errors,
   };
 }
