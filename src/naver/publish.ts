@@ -158,12 +158,54 @@ async function fillContent(page: Page, content: string): Promise<void> {
   await body.click();
   await page.waitForTimeout(200);
 
+  if (looksLikeHtml(content)) {
+    await pasteHtmlContent(page, content);
+    return;
+  }
+
   const lines = content.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     if (i > 0) await page.keyboard.press('Enter');
     const line = lines[i] ?? '';
     if (line) await page.keyboard.type(line, { delay: 5 });
   }
+}
+
+function looksLikeHtml(content: string): boolean {
+  return /<\/?(?:p|h[1-6]|ul|ol|li|blockquote|pre|code|table|img|a|strong|em|hr|div|span)\b/i.test(content);
+}
+
+async function pasteHtmlContent(page: Page, html: string): Promise<void> {
+  const origin = new URL(page.url()).origin;
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin })
+    .catch(() => undefined);
+
+  await page.evaluate(async (value) => {
+    const g = globalThis as unknown as {
+      Blob: typeof Blob;
+      ClipboardItem?: new (items: Record<string, Blob>) => unknown;
+      navigator: {
+        clipboard?: {
+          write?: (items: unknown[]) => Promise<void>;
+          writeText?: (text: string) => Promise<void>;
+        };
+      };
+    };
+    if (g.navigator.clipboard?.write && g.ClipboardItem) {
+      const blob = new g.Blob([value], { type: 'text/html' });
+      const item = new g.ClipboardItem({ 'text/html': blob });
+      await g.navigator.clipboard.write([item]);
+      return;
+    }
+    await g.navigator.clipboard?.writeText?.(value);
+  }, contentToClipboardHtml(html));
+
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
+  await page.waitForTimeout(1000);
+}
+
+function contentToClipboardHtml(html: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`;
 }
 
 async function clickInitialPublish(page: Page): Promise<void> {

@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@jjlabsio/md-to-naver-blog": "^2.0.0",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "better-sqlite3": "^11.7.0",
     "dotenv": "^16.4.7",

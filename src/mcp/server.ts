@@ -3,6 +3,7 @@ import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db, schema } from '../db/client.js';
 import { encrypt } from '../lib/crypto.js';
+import { convertMarkdownInput } from '../markdown/convert.js';
 import { automatedLogin, interactiveLogin } from '../naver/login.js';
 import { publishPost } from '../naver/publish.js';
 import { hasSession } from '../naver/session.js';
@@ -349,6 +350,82 @@ export function createMcpServer(): McpServer {
           status: post?.status,
           naverUrl: post?.naverUrl,
           publishedAt: post?.publishedAt,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'naver_convert_markdown',
+    {
+      title: 'Markdown → Naver HTML 변환',
+      description:
+        'Markdown 문자열 또는 서버 로컬 markdownPath를 네이버 블로그 붙여넣기에 적합한 HTML로 변환. ' +
+        'frontmatter title/tags도 추출.',
+      inputSchema: {
+        markdown: z.string().optional().describe('Markdown 원문. markdownPath와 둘 중 하나 필요'),
+        markdownPath: z.string().optional().describe('서버 로컬 .md 파일 경로. markdown과 둘 중 하나 필요'),
+        title: z.string().optional().describe('frontmatter/H1보다 우선할 제목'),
+        tags: z.array(z.string()).optional().describe('frontmatter tags보다 우선할 태그'),
+      },
+    },
+    async ({ markdown, markdownPath, title, tags }) => {
+      try {
+        const converted = await convertMarkdownInput({ markdown, markdownPath, title, tags });
+        return ok(converted);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'naver_publish_markdown_now',
+    {
+      title: 'Markdown 변환 + 즉시 발행',
+      description:
+        'Markdown 문자열 또는 서버 로컬 .md 파일을 Naver HTML로 변환한 뒤 DB 등록과 즉시 발행을 한 번에 수행.',
+      inputSchema: {
+        accountId: z.number().int().positive(),
+        markdown: z.string().optional().describe('Markdown 원문. markdownPath와 둘 중 하나 필요'),
+        markdownPath: z.string().optional().describe('서버 로컬 .md 파일 경로. markdown과 둘 중 하나 필요'),
+        title: z.string().optional().describe('frontmatter/H1보다 우선할 제목'),
+        tags: z.array(z.string()).optional().describe('frontmatter tags보다 우선할 태그'),
+        category: z.string().optional(),
+      },
+    },
+    async ({ accountId, markdown, markdownPath, title, tags, category }) => {
+      try {
+        const converted = await convertMarkdownInput({ markdown, markdownPath, title, tags });
+        if (!converted.title) {
+          throw new Error('TITLE_REQUIRED: title, frontmatter title, 또는 H1 제목이 필요합니다.');
+        }
+        const [row] = await db
+          .insert(schema.posts)
+          .values({
+            accountId,
+            title: converted.title,
+            content: converted.html,
+            tags: converted.tags?.join(','),
+            category,
+            status: 'draft',
+          })
+          .returning();
+        if (!row?.id) throw new Error('failed to create post');
+        await publishById(row.id);
+        const post = await db.query.posts.findFirst({
+          where: eq(schema.posts.id, row.id),
+        });
+        return ok({
+          postId: row.id,
+          status: post?.status,
+          naverUrl: post?.naverUrl,
+          publishedAt: post?.publishedAt,
+          title: converted.title,
+          tags: converted.tags,
+          conversionErrors: converted.errors,
         });
       } catch (e) {
         return fail(e);
