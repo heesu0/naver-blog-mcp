@@ -42,21 +42,46 @@ export async function deletePost(input: DeleteInput): Promise<DeleteResult> {
     }
 
     // 1단계: 본문 우측 컨트롤의 "삭제" 링크는 DOM엔 있지만 hidden일 수 있음.
-    // visibility 체크 우회: 존재 확인 후 JS click().
-    await page.locator('a._cfmDeletePost').first().waitFor({ state: 'attached', timeout: 15_000 });
-    const opened = await page.evaluate(() => {
+    // Naver DOM changed over time: older pages expose a._cfmDeletePost first,
+    // current pages may expose the actual delete action as a._deletePost directly.
+    // visibility 체크 우회: 후보가 attached 될 때까지 기다린 뒤 JS click().
+    await page
+      .locator('a._cfmDeletePost, a._deletePost, a[href*="Delete"], a[href*="delete"]')
+      .first()
+      .waitFor({ state: 'attached', timeout: 15_000 });
+    const opened = await page.evaluate((logNo) => {
       const g = globalThis as unknown as {
-        document: { querySelector: (s: string) => unknown };
+        document: { querySelectorAll: (s: string) => ArrayLike<unknown> };
       };
-      const a = g.document.querySelector('a._cfmDeletePost') as
-        | { click?: () => void }
-        | null;
-      if (a && typeof a.click === 'function') {
-        a.click();
+      const candidates = Array.from(
+        g.document.querySelectorAll(
+          'a._cfmDeletePost, a._deletePost, a[href*="Delete"], a[href*="delete"]',
+        ),
+      );
+      const targeted = candidates.find((el) => {
+        const anchor = el as {
+          textContent?: string;
+          className?: string;
+          getAttribute?: (name: string) => string | null;
+        };
+        const text = anchor.textContent?.trim() ?? '';
+        const cls = anchor.className ?? '';
+        const href = anchor.getAttribute?.('href') ?? '';
+        const onclick = anchor.getAttribute?.('onclick') ?? '';
+        return (
+          cls.includes(`_param(${logNo}`) ||
+          href.includes(logNo) ||
+          onclick.includes(logNo) ||
+          text === '삭제'
+        );
+      });
+      const chosen = (targeted ?? candidates[0]) as { click?: () => void } | undefined;
+      if (chosen && typeof chosen.click === 'function') {
+        chosen.click();
         return true;
       }
       return false;
-    });
+    }, input.logNo);
     if (!opened) throw new Error('DELETE_LINK_NOT_FOUND');
     await page.waitForTimeout(800);
 
