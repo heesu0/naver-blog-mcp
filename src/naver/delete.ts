@@ -41,6 +41,12 @@ export async function deletePost(input: DeleteInput): Promise<DeleteResult> {
       throw new Error('SESSION_EXPIRED');
     }
 
+    // 이미 삭제된 글이면 Naver가 PostList로 돌려보낸다.
+    if (!page.url().includes(input.logNo)) {
+      await saveSession(context, input.naverId).catch(() => undefined);
+      return { deleted: true };
+    }
+
     // 1단계: 본문 우측 컨트롤의 "삭제" 링크는 DOM엔 있지만 hidden일 수 있음.
     // Naver DOM changed over time: older pages expose a._cfmDeletePost first,
     // current pages may expose the actual delete action as a._deletePost directly.
@@ -85,6 +91,12 @@ export async function deletePost(input: DeleteInput): Promise<DeleteResult> {
     if (!opened) throw new Error('DELETE_LINK_NOT_FOUND');
     await page.waitForTimeout(800);
 
+    // Some Naver pages delete immediately after the first click via native confirm.
+    if (await waitForDeleted(page, input.logNo, 2_000)) {
+      await saveSession(context, input.naverId).catch(() => undefined);
+      return { deleted: true };
+    }
+
     // 2단계: 확인 레이어의 "삭제하기" 버튼.
     const confirmed = await page.evaluate((logNo) => {
       const g = globalThis as unknown as {
@@ -102,7 +114,13 @@ export async function deletePost(input: DeleteInput): Promise<DeleteResult> {
       }
       return false;
     }, input.logNo);
-    if (!confirmed) throw new Error('CONFIRM_BUTTON_NOT_FOUND');
+    if (!confirmed) {
+      if (await waitForDeleted(page, input.logNo, 2_000)) {
+        await saveSession(context, input.naverId).catch(() => undefined);
+        return { deleted: true };
+      }
+      throw new Error('CONFIRM_BUTTON_NOT_FOUND');
+    }
 
     // 삭제 후 페이지 이동(블로그 메인) 대기
     const deleted = await waitForDeleted(page, input.logNo);
@@ -115,8 +133,8 @@ export async function deletePost(input: DeleteInput): Promise<DeleteResult> {
   }
 }
 
-async function waitForDeleted(page: Page, logNo: string): Promise<boolean> {
-  const deadline = Date.now() + 30_000;
+async function waitForDeleted(page: Page, logNo: string, timeoutMs = 30_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const url = page.url();
     if (!url.includes(logNo)) return true;
